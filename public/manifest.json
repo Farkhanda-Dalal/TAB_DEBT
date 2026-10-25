@@ -3,7 +3,7 @@
   "name": "Tab Debt",
   "version": "1.0.0",
   "description": "AI-assisted automated tab cleanup for the MLH Lazy Challenge.",
-  "permissions": ["tabs", "storage", "scripting", "activeTab"],
+  "permissions": ["tabs", "storage", "scripting", "activeTab", "downloads"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",
