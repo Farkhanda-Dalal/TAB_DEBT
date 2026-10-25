@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Debt",
+  "version": "1.0.0",
+  "description": "AI-assisted automated tab cleanup for the MLH Lazy Challenge.",
+  "permissions": ["tabs", "storage", "scripting", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "Tab Debt"
+  }
+}
