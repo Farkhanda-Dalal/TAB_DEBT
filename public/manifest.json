@@ -9,8 +9,11 @@
     "service_worker": "background.js",
     "type": "module"
   },
+  "options_ui": {
+    "page": "index.html",
+    "open_in_tab": true
+  },
   "action": {
-    "default_popup": "index.html",
-    "default_title": "Tab Debt"
+    "default_title": "Open Tab Debt settings"
   }
 }

@@ -6,12 +6,20 @@ export interface SavedNote {
   savedAt: number;
 }
 
-export interface ProtectedDomain {
-  domain: string;
+export interface ProtectedUrl {
+  url: string;
   addedAt: number;
 }
 
+export type ProtectedDomain = ProtectedUrl;
+
+export interface CleanupMetrics {
+  totalTabsScanned: number;
+  duplicateTabsClosed: number;
+  protectedTabsSkipped: number;
+}
+
 export interface ExtensionMessage {
-  action: "CLEANUP_NOW" | "GET_METRICS" | "GET_PROTECTED";
+  action: 'CLEANUP_NOW' | 'GET_METRICS' | 'GET_PROTECTED';
   payload?: unknown;
 }
