@@ -6,6 +6,15 @@ const SAVED_NOTES_KEY = 'tabDebt.savedNotes';
 const hasChromeStorage = (): boolean =>
   typeof chrome !== 'undefined' && Boolean(chrome.storage?.local);
 
+const isProtectedUrl = (value: unknown): value is ProtectedUrl =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as ProtectedUrl).url === 'string' &&
+  typeof (value as ProtectedUrl).addedAt === 'number';
+
+const asProtectedUrls = (value: unknown): ProtectedUrl[] =>
+  Array.isArray(value) ? value.filter(isProtectedUrl) : [];
+
 const readBrowserValue = <T>(key: string, fallback: T): T => {
   const value = window.localStorage.getItem(key);
   if (!value) return fallback;
@@ -24,15 +33,15 @@ const writeBrowserValue = <T>(key: string, value: T): void => {
 export async function getProtectedUrls(): Promise<ProtectedUrl[]> {
   if (hasChromeStorage()) {
     const result = await chrome.storage.local.get(PROTECTED_URLS_KEY);
-    return (result[PROTECTED_URLS_KEY] as ProtectedUrl[] | undefined) ?? [];
+    return asProtectedUrls(result[PROTECTED_URLS_KEY]);
   }
 
-  return readBrowserValue<ProtectedUrl[]>(PROTECTED_URLS_KEY, []);
+  return asProtectedUrls(readBrowserValue<unknown>(PROTECTED_URLS_KEY, []));
 }
 
 export async function addProtectedUrl(url: string): Promise<ProtectedUrl[]> {
   const current = await getProtectedUrls();
-  const next = [...current, { url, addedAt: Date.now() }];
+  const next = [...current, { url: url.trim(), addedAt: Date.now() }];
 
   if (hasChromeStorage()) {
     await chrome.storage.local.set({ [PROTECTED_URLS_KEY]: next });

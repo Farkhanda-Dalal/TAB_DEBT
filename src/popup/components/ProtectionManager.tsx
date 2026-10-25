@@ -24,12 +24,17 @@ export function ProtectionManager({ onChange }: ProtectionManagerProps) {
   const [url, setUrl] = useState('');
   const [protectedUrls, setProtectedUrls] = useState<ProtectedUrl[]>([]);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    void getProtectedUrls().then((urls) => {
-      setProtectedUrls(urls);
-      onChange?.(urls);
-    });
+    void getProtectedUrls()
+      .then((urls) => {
+        setProtectedUrls(urls);
+        onChange?.(urls);
+      })
+      .catch(() => setError('Unable to load protected URLs. Please try again.'))
+      .finally(() => setIsLoading(false));
   }, [onChange]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -46,17 +51,29 @@ export function ProtectionManager({ onChange }: ProtectionManagerProps) {
       return;
     }
 
-    const next = await addProtectedUrl(normalizedUrl);
-    setProtectedUrls(next);
-    onChange?.(next);
-    setUrl('');
-    setError('');
+    setIsSaving(true);
+    try {
+      const next = await addProtectedUrl(normalizedUrl);
+      setProtectedUrls(next);
+      onChange?.(next);
+      setUrl('');
+      setError('');
+    } catch {
+      setError('Unable to save this URL. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function handleRemove(urlToRemove: string) {
-    const next = await removeProtectedUrl(urlToRemove);
-    setProtectedUrls(next);
-    onChange?.(next);
+    try {
+      const next = await removeProtectedUrl(urlToRemove);
+      setProtectedUrls(next);
+      onChange?.(next);
+      setError('');
+    } catch {
+      setError('Unable to remove this URL. Please try again.');
+    }
   }
 
   return (
@@ -84,7 +101,7 @@ export function ProtectionManager({ onChange }: ProtectionManagerProps) {
           aria-describedby={error ? 'url-error' : undefined}
         />
         <button className="button button-primary" type="submit">
-          Add URL
+          {isSaving ? 'Saving...' : 'Add URL'}
         </button>
       </form>
       {error && (
@@ -92,7 +109,9 @@ export function ProtectionManager({ onChange }: ProtectionManagerProps) {
           {error}
         </p>
       )}
-      {protectedUrls.length === 0 ? (
+      {isLoading ? (
+        <p className="empty-message">Loading protected URLs...</p>
+      ) : protectedUrls.length === 0 ? (
         <p className="empty-message">No protected URLs yet.</p>
       ) : (
         <ul className="protected-list">

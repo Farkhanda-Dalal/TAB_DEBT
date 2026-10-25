@@ -46,6 +46,8 @@ interface SavedNote {
 
 The UI stores one protected entry per exact full URL. For example, protecting `https://twitter.com/home` does not protect another Twitter URL.
 
+Storage reads validate the protected URL shape and ignore malformed entries. Storage failures are surfaced in the protection UI with an actionable error message. URLs are trimmed before they are saved.
+
 ## Message contract
 
 The dashboard's **Clean my tabs** button sends:
