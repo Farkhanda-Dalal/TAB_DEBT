@@ -1,63 +1,95 @@
-import { getTabsToClean } from "../services/tabs";
-import { getTabsToClose } from "../services/cleanup";
-import { summarizeTab } from "../services/ai";
+import { getTabsToClean } from "./tabs";
+import { getTabsToClose } from "./cleanup";
+import { summarizeTab } from "./ai";
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.action === "START_CLEANUP") {
-    runCleanupCycle(message.payload).then(sendResponse);
+  if (message.action === "CLEANUP_NOW") {
+    runCleanupCycle().then(sendResponse);
     return true;
   }
 });
 
-async function runCleanupCycle(payload: {
-  protectedUrls: string[];
-  hfApiKey: string;
-  staleThresholdMinutes: number;
-}) {
+async function runCleanupCycle() {
   try {
-    const { protectedUrls, hfApiKey, staleThresholdMinutes } = payload;
+    // 1. Read frontend's storage contract
+    const storage = await chrome.storage.local.get([
+      "tabDebt.protectedUrls",
+      "tabDebt.savedNotes",
+    ]);
 
-    // A. Calculate Scanned & Protected Metrics
+    // Map her ProtectedUrl objects to a simple array of string URLs for our engine
+    const protectedUrlObjects = (storage["tabDebt.protectedUrls"] ||
+      []) as Array<{ url: string }>;
+    const protectedUrls = protectedUrlObjects.map(
+      (p: { url: string }) => p.url,
+    );
+
+    // Hardcoding the API key and threshold for now since the UI doesn't send them yet
+    const hfApiKey = import.meta.env.VITE_HF_API_KEY; // TODO: Add your Hugging Face API key here for testing
+    console.log("[Tab Debt] HF API key loaded:", Boolean(hfApiKey));
+console.log("[Tab Debt] HF API key length:", hfApiKey?.length ?? 0);
+    const staleThresholdMinutes = 1440; // 24 hours
+
+    // 2. Calculate Scanned & Protected Metrics
     const allTabs = await chrome.tabs.query({});
-    const totalScanned = allTabs.length;
+    const totalTabsScanned = allTabs.length;
 
     const unprotectedTabs = await getTabsToClean(protectedUrls);
-    const tabsProtected = totalScanned - unprotectedTabs.length;
+    const protectedTabsSkipped = totalTabsScanned - unprotectedTabs.length;
 
-    // B. Run Cleanup Engine
+    // 3. Run Cleanup Engine
     const { tabsToClose, duplicateCount } = getTabsToClose(
       unprotectedTabs,
       staleThresholdMinutes,
     );
-    const tabsClosed = tabsToClose.length;
 
-    if (tabsClosed === 0) {
-      return { success: true, closedCount: 0 };
+    if (tabsToClose.length === 0) {
+      return {
+        success: true,
+        metrics: {
+          totalTabsScanned,
+          duplicateTabsClosed: 0,
+          protectedTabsSkipped,
+        },
+      };
     }
 
-    const closedTabsLog = [];
+    const newNotes = [];
     const tabIdsToRemove: number[] = [];
 
-    // C. Summarize & Log
+    // 4. Summarize and format to frontend's SavedNote structure
     for (const tab of tabsToClose) {
       if (!tab.id) continue;
       tabIdsToRemove.push(tab.id);
 
-      let summary = "Summary skipped (no API key provided).";
+      let summary = "Summary skipped (no API key).";
       if (hfApiKey && tab.url && tab.title) {
         summary = await summarizeTab(tab.id, tab.title, tab.url, hfApiKey);
       }
 
-      closedTabsLog.push({
+      newNotes.push({
+        id: crypto.randomUUID(),
         title: tab.title || "Unknown Title",
         url: tab.url || "Unknown URL",
         summary: summary,
-        closedAt: new Date().toISOString(),
+        savedAt: Date.now(),
       });
     }
 
-    // D. Trigger JSON Download
-    const fileContent = JSON.stringify(closedTabsLog, null, 2);
+    // 5. Save notes back to storage for SavedNotesList.tsx to render
+    const existingNotes = (storage["tabDebt.savedNotes"] || []) as Array<{
+      id: string;
+      title: string;
+      url: string;
+      summary: string;
+      savedAt: number;
+    }>;
+    await chrome.storage.local.set({
+      "tabDebt.savedNotes": [...existingNotes, ...newNotes],
+    });
+
+    // ADD THIS BLOCK TO TRIGGER THE DOWNLOAD
+    const fileContent = JSON.stringify(newNotes, null, 2);
     const dataUrl = `data:application/json;charset=utf-8,${encodeURIComponent(fileContent)}`;
     await chrome.downloads.download({
       url: dataUrl,
@@ -65,26 +97,21 @@ async function runCleanupCycle(payload: {
       saveAs: false,
     });
 
-    // E. Save Metrics & Open Summary Page
-    const metrics = {
-      totalScanned,
-      tabsProtected,
-      duplicateTabsClosed: duplicateCount,
-      tabsClosed,
-    };
-
-    // Save to storage so the React frontend can read it
-    await chrome.storage.local.set({ latestMetrics: metrics });
-
-    // Open the summary page (we pass a query param so React knows what view to show)
-    await chrome.tabs.create({
-      url: chrome.runtime.getURL("index.html?view=summary"),
-    });
-
-    // F. Close the physical tabs
+    // 6. Close the physical tabs
     await chrome.tabs.remove(tabIdsToRemove);
 
-    return { success: true, metrics };
+    // 6. Close the physical tabs
+    await chrome.tabs.remove(tabIdsToRemove);
+
+    // 7. Return exact metrics contract to the UI
+    return {
+      success: true,
+      metrics: {
+        totalTabsScanned,
+        duplicateTabsClosed: duplicateCount,
+        protectedTabsSkipped,
+      },
+    };
   } catch (error) {
     console.error("Tab Debt Cleanup Failed:", error);
     return { success: false, error: "Cleanup encountered an error." };

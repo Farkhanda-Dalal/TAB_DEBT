@@ -6,7 +6,20 @@ export function SavedNotesList() {
   const [notes, setNotes] = useState<SavedNote[]>([]);
 
   useEffect(() => {
+    // 1. Initial load
     void getSavedNotes().then(setNotes);
+
+    // 2. Listen for live updates from background.ts
+    if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+      const storageListener = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
+        if (areaName === 'local' && changes['tabDebt.savedNotes']) {
+          setNotes((changes['tabDebt.savedNotes'].newValue as SavedNote[] | undefined) ?? []);
+        }
+      };
+      
+      chrome.storage.onChanged.addListener(storageListener);
+      return () => chrome.storage.onChanged.removeListener(storageListener);
+    }
   }, []);
 
   return (
